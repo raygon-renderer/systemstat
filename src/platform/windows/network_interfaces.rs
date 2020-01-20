@@ -1,8 +1,8 @@
-use libc::{c_void, free, malloc, size_t, uint8_t};
+use libc::{c_void, free, malloc, size_t};
 use winapi::ctypes::*;
 use winapi::shared::minwindef::*;
 use winapi::shared::winerror::{ERROR_BUFFER_OVERFLOW, ERROR_SUCCESS};
-use winapi::shared::ws2def::{AF_INET6, AF_INET, AF_UNSPEC, SOCKADDR};
+use winapi::shared::ws2def::{AF_INET, AF_INET6, AF_UNSPEC, SOCKADDR};
 use winapi::shared::ws2ipdef::SOCKADDR_IN6_LH;
 
 use super::{c_char_array_to_string, last_os_error, u16_array_to_string};
@@ -56,7 +56,7 @@ struct IpAdapterUnicastAddress {
     valid_lifetime: ULONG,
     preferred_lifetime: ULONG,
     lease_lifetime: ULONG,
-    on_link_prefix_length: uint8_t,
+    on_link_prefix_length: u8,
 }
 
 const MAX_ADAPTER_ADDRESS_LENGTH: usize = 8;
@@ -89,13 +89,7 @@ struct IpAdapterAddresses {
 // C:\Program Files (x86)\Windows Kits\8.1\Include\um\IPHlpApi.h
 #[link(name = "Iphlpapi")]
 extern "system" {
-    fn GetAdaptersAddresses(
-        family: ULONG,
-        flags: ULONG,
-        reserved: *const c_void,
-        addresses: *mut IpAdapterAddresses,
-        size: *mut ULONG,
-    ) -> ULONG;
+    fn GetAdaptersAddresses(family: ULONG, flags: ULONG, reserved: *const c_void, addresses: *mut IpAdapterAddresses, size: *mut ULONG) -> ULONG;
 }
 
 const WORKING_BUFFER_SIZEL: size_t = 15000;
@@ -157,10 +151,7 @@ pub fn get() -> io::Result<BTreeMap<String, Network>> {
             // ip
             let mut cur_p_addr = (*cur_p_adapter).first_unicass_address;
             while !cur_p_addr.is_null() {
-                let addr = parse_addr_and_netmask(
-                    (*cur_p_addr).address.lp_sockaddr,
-                    (*cur_p_addr).on_link_prefix_length,
-                );
+                let addr = parse_addr_and_netmask((*cur_p_addr).address.lp_sockaddr, (*cur_p_addr).on_link_prefix_length);
                 addrs.push(addr);
                 // println!("{:?}", addr);
                 // next addr
@@ -196,7 +187,7 @@ fn physical_address_to_string(array: &[u8; 8], length: DWORD) -> String {
 }
 
 // Thanks , copy from unix.rs and some modify
-fn parse_addr_and_netmask(aptr: *const SOCKADDR, net_bits: uint8_t) -> NetworkAddrs {
+fn parse_addr_and_netmask(aptr: *const SOCKADDR, net_bits: u8) -> NetworkAddrs {
     if aptr == ptr::null() {
         return NetworkAddrs {
             addr: IpAddr::Empty,
@@ -225,16 +216,7 @@ fn parse_addr_and_netmask(aptr: *const SOCKADDR, net_bits: uint8_t) -> NetworkAd
             let mut a: [u8; 16] = unsafe { *(*addr6).sin6_addr.u.Byte() };
             &mut a[..].reverse();
             let a: [u16; 8] = unsafe { mem::transmute(a) };
-            let addr = IpAddr::V6(Ipv6Addr::new(
-                a[7],
-                a[6],
-                a[5],
-                a[4],
-                a[3],
-                a[2],
-                a[1],
-                a[0],
-            ));
+            let addr = IpAddr::V6(Ipv6Addr::new(a[7], a[6], a[5], a[4], a[3], a[2], a[1], a[0]));
             let netmask = if net_bits <= 128 {
                 IpAddr::V6(netmask_v6(net_bits))
             } else {
@@ -260,12 +242,7 @@ fn netmask_v4(bits: u8) -> Ipv4Addr {
             _ => 0,
         }
     });
-    Ipv4Addr::new(
-        i.next().unwrap(),
-        i.next().unwrap(),
-        i.next().unwrap(),
-        i.next().unwrap(),
-    )
+    Ipv4Addr::new(i.next().unwrap(), i.next().unwrap(), i.next().unwrap(), i.next().unwrap())
 }
 
 fn netmask_v6(bits: u8) -> Ipv6Addr {
@@ -282,16 +259,7 @@ fn netmask_v6(bits: u8) -> Ipv6Addr {
             _ => {}
         }
     });
-    Ipv6Addr::new(
-        tmp[0],
-        tmp[1],
-        tmp[2],
-        tmp[3],
-        tmp[4],
-        tmp[5],
-        tmp[6],
-        tmp[7],
-    )
+    Ipv6Addr::new(tmp[0], tmp[1], tmp[2], tmp[3], tmp[4], tmp[5], tmp[6], tmp[7])
 }
 
 #[test]
@@ -330,8 +298,9 @@ fn netmask_v4_test() {
         (30, "255.255.255.252"),
         (31, "255.255.255.254"),
         (32, "255.255.255.255"),
-    ].into_iter()
-        .for_each(|(i, addr)| assert_eq!(netmask_v4(i), addr.parse::<Ipv4Addr>().unwrap()))
+    ]
+    .into_iter()
+    .for_each(|(i, addr)| assert_eq!(netmask_v4(i), addr.parse::<Ipv4Addr>().unwrap()))
 }
 
 #[test]
@@ -466,6 +435,7 @@ fn netmask_v6_test() {
         (126, "ffff:ffff:ffff:ffff:ffff:ffff:ffff:fffc"),
         (127, "ffff:ffff:ffff:ffff:ffff:ffff:ffff:fffe"),
         (128, "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"),
-    ].into_iter()
-        .for_each(|(i, addr)| assert_eq!(netmask_v6(i), addr.parse::<Ipv6Addr>().unwrap()))
+    ]
+    .into_iter()
+    .for_each(|(i, addr)| assert_eq!(netmask_v6(i), addr.parse::<Ipv6Addr>().unwrap()))
 }

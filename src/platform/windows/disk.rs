@@ -1,6 +1,6 @@
 use winapi::ctypes::c_ulong;
 use winapi::shared::minwindef::FALSE;
-use winapi::um::fileapi::{GetDiskFreeSpaceExW, GetLogicalDriveStringsW, GetVolumeInformationW, GetDriveTypeW};
+use winapi::um::fileapi::{GetDiskFreeSpaceExW, GetDriveTypeW, GetLogicalDriveStringsW, GetVolumeInformationW};
 use winapi::um::winnt::ULARGE_INTEGER;
 
 use super::{last_os_error, u16_array_to_string};
@@ -48,7 +48,7 @@ pub fn drives() -> io::Result<Vec<Filesystem>> {
                 free: ByteSize::b(0),
                 files: 0,
                 files_total: 0,
-                files_avail: 0
+                files_avail: 0,
             };
         } else {
             let (total, avail, free) = get_disk_space_ext(us)?;
@@ -89,61 +89,54 @@ fn get_volume_information(name: &[u16]) -> io::Result<(c_ulong, String, String)>
     let mut max_component_length: c_ulong = 0;
     let mut fs_flags: c_ulong = 0;
 
-    if FALSE == unsafe {
-        GetVolumeInformationW(
-            p_name,
-            p_volume_name,
-            255,
-            p_volume_serial,
-            &mut max_component_length as *mut _,
-            &mut fs_flags as *mut _,
-            p_fs_name,
-            255,
-        )
-    } {
+    if FALSE
+        == unsafe {
+            GetVolumeInformationW(
+                p_name,
+                p_volume_name,
+                255,
+                p_volume_serial,
+                &mut max_component_length as *mut _,
+                &mut fs_flags as *mut _,
+                p_fs_name,
+                255,
+            )
+        }
+    {
         match unsafe { GetDriveTypeW(p_name) } {
-            2 => { // REMOVABLE DRIVE (Floppy, USB, etc)
-                return Ok((
-                    max_component_length,
-                    String::from("REM"),
-                    u16_array_to_string(p_volume_name)
-                ))
-            },
-            5 => { // DRIVE_CDROM
-                return Ok((
-                    max_component_length,
-                    String::from("CDROM"),
-                    u16_array_to_string(p_volume_name)
-                ))
-            },
-            _ => last_os_error()?
+            2 => {
+                // REMOVABLE DRIVE (Floppy, USB, etc)
+                return Ok((max_component_length, String::from("REM"), u16_array_to_string(p_volume_name)));
+            }
+            5 => {
+                // DRIVE_CDROM
+                return Ok((max_component_length, String::from("CDROM"), u16_array_to_string(p_volume_name)));
+            }
+            _ => last_os_error()?,
         };
     }
 
-    Ok((
-        max_component_length,
-        u16_array_to_string(p_fs_name),
-        u16_array_to_string(p_volume_name),
-    ))
+    Ok((max_component_length, u16_array_to_string(p_fs_name), u16_array_to_string(p_volume_name)))
 }
 
 fn get_disk_space_ext(name: &[u16]) -> io::Result<(u64, u64, u64)> {
+    use std::mem::MaybeUninit;
+
     let p_name = name.as_ptr();
 
-    let mut avail: ULARGE_INTEGER = unsafe { mem::uninitialized() };
-    let mut total: ULARGE_INTEGER = unsafe { mem::uninitialized() };
-    let mut free: ULARGE_INTEGER = unsafe { mem::uninitialized() };
+    let mut avail: MaybeUninit<ULARGE_INTEGER> = MaybeUninit::uninit(); //unsafe { mem::uninitialized() };
+    let mut total: MaybeUninit<ULARGE_INTEGER> = MaybeUninit::uninit(); //unsafe { mem::uninitialized() };
+    let mut free: MaybeUninit<ULARGE_INTEGER> = MaybeUninit::uninit(); //unsafe { mem::uninitialized() };
 
-    if FALSE == unsafe {
-        GetDiskFreeSpaceExW(
-            p_name,
-            &mut avail as *mut _,
-            &mut total as *mut _,
-            &mut free as *mut _,
-        )
-    } {
+    if FALSE == unsafe { GetDiskFreeSpaceExW(p_name, avail.as_mut_ptr(), total.as_mut_ptr(), free.as_mut_ptr()) } {
         last_os_error()?;
     }
 
-    unsafe { Ok((*total.QuadPart(), *avail.QuadPart(), *free.QuadPart())) }
+    unsafe {
+        Ok((
+            *total.assume_init().QuadPart(),
+            *avail.assume_init().QuadPart(),
+            *free.assume_init().QuadPart(),
+        ))
+    }
 }

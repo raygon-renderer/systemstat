@@ -2,13 +2,13 @@
 //!
 //! They're always the same across all platforms.
 
-use std::io;
-pub use std::time::Duration;
-pub use std::net::{Ipv4Addr, Ipv6Addr};
-pub use std::collections::BTreeMap;
-pub use chrono::{DateTime, Utc, NaiveDateTime, TimeZone};
 pub use bytesize::ByteSize;
+pub use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+pub use std::collections::BTreeMap;
+use std::io;
+pub use std::net::{Ipv4Addr, Ipv6Addr};
 use std::ops::Sub;
+pub use std::time::Duration;
 
 #[inline(always)]
 pub fn saturating_sub_bytes(l: ByteSize, r: ByteSize) -> ByteSize {
@@ -19,12 +19,12 @@ pub fn saturating_sub_bytes(l: ByteSize, r: ByteSize) -> ByteSize {
 ///
 /// Time should pass between getting the object and calling .done() on it.
 pub struct DelayedMeasurement<T> {
-    res: Box<Fn() -> io::Result<T> + Send>,
+    res: Box<dyn Fn() -> io::Result<T> + Send>,
 }
 
 impl<T> DelayedMeasurement<T> {
     #[inline(always)]
-    pub fn new(f: Box<Fn() -> io::Result<T> + Send>) -> DelayedMeasurement<T> {
+    pub fn new(f: Box<dyn Fn() -> io::Result<T> + Send>) -> DelayedMeasurement<T> {
         DelayedMeasurement { res: f }
     }
 
@@ -41,47 +41,43 @@ pub struct PlatformCpuLoad {}
 #[cfg(target_os = "linux")]
 #[derive(Debug, Clone)]
 pub struct PlatformCpuLoad {
-    pub iowait: f32
+    pub iowait: f32,
 }
 
 impl PlatformCpuLoad {
-    #[cfg(target_os="linux")]
+    #[cfg(target_os = "linux")]
     #[inline(always)]
     pub fn avg_add(self, rhs: &Self) -> Self {
         PlatformCpuLoad {
-            iowait: (self.iowait + rhs.iowait) / 2.0
+            iowait: (self.iowait + rhs.iowait) / 2.0,
         }
     }
 
-    #[cfg(not(target_os="linux"))]
+    #[cfg(not(target_os = "linux"))]
     #[inline(always)]
     pub fn avg_add(self, rhs: &Self) -> Self {
         PlatformCpuLoad {}
     }
 
-    #[cfg(target_os="linux")]
+    #[cfg(target_os = "linux")]
     #[inline(always)]
     pub fn zero() -> Self {
-        PlatformCpuLoad {
-            iowait: 0.0,
-        }
+        PlatformCpuLoad { iowait: 0.0 }
     }
 
-    #[cfg(not(target_os="linux"))]
+    #[cfg(not(target_os = "linux"))]
     #[inline(always)]
     pub fn zero() -> Self {
         PlatformCpuLoad {}
     }
 
-    #[cfg(target_os="linux")]
+    #[cfg(target_os = "linux")]
     #[inline(always)]
     pub fn from(input: f32) -> Self {
-        PlatformCpuLoad {
-            iowait: input,
-        }
+        PlatformCpuLoad { iowait: input }
     }
 
-    #[cfg(not(target_os="linux"))]
+    #[cfg(not(target_os = "linux"))]
     #[inline(always)]
     pub fn from(input: f32) -> Self {
         PlatformCpuLoad {}
@@ -95,7 +91,7 @@ pub struct CPULoad {
     pub system: f32,
     pub interrupt: f32,
     pub idle: f32,
-    pub platform: PlatformCpuLoad
+    pub platform: PlatformCpuLoad,
 }
 
 impl CPULoad {
@@ -215,7 +211,7 @@ pub struct PlatformMemory {
     pub free: ByteSize,
 }
 
-#[cfg(any(target_os = "linux", target_os="android"))]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[derive(Debug, Clone)]
 pub struct PlatformMemory {
     pub meminfo: BTreeMap<String, ByteSize>,
