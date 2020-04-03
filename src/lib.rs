@@ -5,12 +5,12 @@
 
 extern crate bytesize;
 extern crate chrono;
+#[cfg_attr(any(target_os = "freebsd", target_os = "openbsd", target_os = "macos"), macro_use)]
+extern crate lazy_static;
 extern crate libc;
 extern crate time;
 #[cfg(windows)]
 extern crate winapi;
-#[macro_use]
-extern crate lazy_static;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[macro_use]
 extern crate nom;

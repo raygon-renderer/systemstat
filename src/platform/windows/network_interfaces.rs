@@ -157,10 +157,7 @@ pub fn get() -> io::Result<BTreeMap<String, Network>> {
                 // next addr
                 cur_p_addr = (*cur_p_addr).next;
             }
-            let network = Network {
-                name: friendly_name,
-                addrs: addrs,
-            };
+            let network = Network { name: friendly_name, addrs };
             map.insert(adapter_name, network);
 
             // next adapter
@@ -174,13 +171,13 @@ pub fn get() -> io::Result<BTreeMap<String, Network>> {
     Ok(map)
 }
 
-fn physical_address_to_string(array: &[u8; 8], length: DWORD) -> String {
+fn _physical_address_to_string(array: [u8; 8], length: DWORD) -> String {
     let mut bytes = Vec::with_capacity(length as usize);
-    for idx in 0..length as usize {
+    for (idx, b) in array.iter().enumerate().take(length as usize) {
         if idx == 0 {
-            write!(&mut bytes, "{:02X}", array[idx]).unwrap();
+            write!(&mut bytes, "{:02X}", b).unwrap();
         } else {
-            write!(&mut bytes, "-{:02X}", array[idx]).unwrap();
+            write!(&mut bytes, "-{:02X}", b).unwrap();
         }
     }
     String::from_utf8_lossy(&bytes[..]).into_owned()
@@ -188,7 +185,7 @@ fn physical_address_to_string(array: &[u8; 8], length: DWORD) -> String {
 
 // Thanks , copy from unix.rs and some modify
 fn parse_addr_and_netmask(aptr: *const SOCKADDR, net_bits: u8) -> NetworkAddrs {
-    if aptr == ptr::null() {
+    if aptr.is_null() {
         return NetworkAddrs {
             addr: IpAddr::Empty,
             netmask: IpAddr::Empty,
@@ -212,9 +209,10 @@ fn parse_addr_and_netmask(aptr: *const SOCKADDR, net_bits: u8) -> NetworkAddrs {
         }
         AF_INET6 => {
             // This is horrible.
-            let addr6: *const SOCKADDR_IN6_LH = unsafe { mem::transmute(aptr) };
-            let mut a: [u8; 16] = unsafe { *(*addr6).sin6_addr.u.Byte() };
-            &mut a[..].reverse();
+            #[allow(clippy::cast_ptr_alignment)]
+            let addr6: *const SOCKADDR_IN6_LH = aptr as *const SOCKADDR_IN6_LH;
+            let mut a: [u8; 16] = unsafe { *std::ptr::read_unaligned(addr6).sin6_addr.u.Byte() };
+            a[..].reverse();
             let a: [u16; 8] = unsafe { mem::transmute(a) };
             let addr = IpAddr::V6(Ipv6Addr::new(a[7], a[6], a[5], a[4], a[3], a[2], a[1], a[0]));
             let netmask = if net_bits <= 128 {
